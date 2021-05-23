@@ -347,8 +347,13 @@ func (mem *CListMempool) reqResCb(
 
 // Called from:
 //  - resCbFirstTime (lock not held) if tx is valid
-func (mem *CListMempool) addTx(memTx *mempoolTx) {
-	e := mem.txs.PushBack(memTx)
+func (mem *CListMempool) addTx(memTx *mempoolTx, pushFront bool) {
+	var e *clist.CElement
+	if pushFront {
+		e = mem.txs.PushFront(memTx)
+	} else {
+		e = mem.txs.PushBack(memTx)
+	}
 	mem.txsMap.Store(txKey(memTx.tx), e)
 	atomic.AddInt64(&mem.txsBytes, int64(len(memTx.tx)))
 	mem.metrics.TxSizeBytes.Observe(float64(len(memTx.tx)))
@@ -416,7 +421,7 @@ func (mem *CListMempool) resCbFirstTime(
 				tx:        tx,
 			}
 			memTx.senders.Store(peerID, true)
-			mem.addTx(memTx)
+			mem.addTx(memTx, r.CheckTx.IsOracleTx)
 			mem.logger.Info("Added good transaction",
 				"tx", txID(tx),
 				"res", r,
