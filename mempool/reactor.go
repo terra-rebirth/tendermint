@@ -197,6 +197,8 @@ func (memR *Reactor) broadcastTxRoutine(peer p2p.Peer) {
 
 	peerID := memR.ids.GetForPeer(peer)
 	var next *clist.CElement
+	var prev *clist.CElement
+	isNext := true
 	for {
 		// In case of both next.NextWaitChan() and peer.Quit() are variable at the same time
 		if !memR.IsRunning() || !peer.IsRunning() {
@@ -211,6 +213,8 @@ func (memR *Reactor) broadcastTxRoutine(peer p2p.Peer) {
 				if next = memR.mempool.TxsFront(); next == nil {
 					continue
 				}
+
+				prev = next
 			case <-peer.Quit():
 				return
 			case <-memR.Quit():
@@ -218,7 +222,12 @@ func (memR *Reactor) broadcastTxRoutine(peer p2p.Peer) {
 			}
 		}
 
-		memTx := next.Value.(*mempoolTx)
+		var memTx *mempoolTx
+		if isNext {
+			memTx = next.Value.(*mempoolTx)
+		} else {
+			memTx = prev.Value.(*mempoolTx)
+		}
 
 		// make sure the peer is up to date
 		peerState, ok := peer.Get(types.PeerStateKey).(PeerState)
@@ -251,6 +260,11 @@ func (memR *Reactor) broadcastTxRoutine(peer p2p.Peer) {
 		case <-next.NextWaitChan():
 			// see the start of the for loop for nil check
 			next = next.Next()
+			isNext = true
+		case <-prev.PrevWaitChan():
+			// see the start of the for loop for nil check
+			prev = prev.Prev()
+			isNext = false
 		case <-peer.Quit():
 			return
 		case <-memR.Quit():
