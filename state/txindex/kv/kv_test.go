@@ -3,7 +3,6 @@ package kv
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -452,6 +451,78 @@ func TestTxSearch(t *testing.T) {
 	}
 }
 
+func TestTxSearchEventMatch(t *testing.T) {
+
+	indexer := NewTxIndex(db.NewMemDB())
+
+	txResult := txResultWithEvents([]abci.Event{
+		{Type: "account", Attributes: []abci.EventAttribute{{Key: []byte("number"), Value: []byte("1"), Index: true}, {Key: []byte("owner"), Value: []byte("Ana"), Index: true}}},
+		{Type: "account", Attributes: []abci.EventAttribute{{Key: []byte("number"), Value: []byte("2"), Index: true}, {Key: []byte("owner"), Value: []byte("Ivan"), Index: true}}},
+		{Type: "", Attributes: []abci.EventAttribute{{Key: []byte("not_allowed"), Value: []byte("Vlad"), Index: true}}},
+	})
+
+	err := indexer.Index(txResult)
+	require.NoError(t, err)
+
+	testCases := map[string]struct {
+		q             string
+		resultsLength int
+	}{
+		"Return all events from a height": {
+			q:             "match.events = 1 AND tx.height = 1",
+			resultsLength: 1,
+		},
+		"Return all events from a height (deduplicate height)": {
+			q:             "match.events = 1 AND tx.height = 1 AND tx.height = 1",
+			resultsLength: 1,
+		},
+		"Match attributes with height range and event": {
+			q:             "match.events = 1 AND tx.height < 2 AND tx.height > 0 AND account.number = 1 AND account.owner CONTAINS 'Ana'",
+			resultsLength: 1,
+		},
+		"Match attributes with height range and event - no match": {
+			q:             "match.events = 1 AND tx.height < 2 AND tx.height > 0 AND account.number = 2 AND account.owner = 'Ana'",
+			resultsLength: 0,
+		},
+		"Deduplucation test - match events only at the beginning": {
+			q:             "tx.height < 2 AND tx.height > 0 AND account.number = 2 AND account.owner = 'Ana' AND match.events = 1",
+			resultsLength: 1,
+		},
+		"Deduplucation test - match events multiple": {
+			q:             "match.events = 1 AND tx.height < 2 AND tx.height > 0 AND account.number = 2 AND account.owner = 'Ana' AND match.events = 1",
+			resultsLength: 0,
+		},
+		"Match attributes with event": {
+			q:             "account.number = 2 AND account.owner = 'Ana' AND tx.height = 1",
+			resultsLength: 1,
+		},
+		"Match range w/o match events": {
+			q:             "account.number < 2 AND account.owner = 'Ivan'",
+			resultsLength: 1,
+		},
+		" Match range with match events": {
+			q:             "match.events = 1 AND account.number < 2 AND account.owner = 'Ivan'",
+			resultsLength: 0,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.q, func(t *testing.T) {
+			results, err := indexer.Search(ctx, query.MustParse(tc.q))
+			assert.NoError(t, err)
+
+			assert.Len(t, results, tc.resultsLength)
+			if tc.resultsLength > 0 {
+				for _, txr := range results {
+					assert.True(t, proto.Equal(txResult, txr))
+				}
+			}
+		})
+	}
+}
 func TestTxSearchWithCancelation(t *testing.T) {
 	indexer := NewTxIndex(db.NewMemDB())
 
@@ -571,6 +642,103 @@ func TestTxSearchOneTxWithMultipleSameTagsButDifferentValues(t *testing.T) {
 	}
 }
 
+func TestTxIndexDuplicatePreviouslySuccessful(t *testing.T) {
+	mockTx := types.Tx("MOCK_TX_HASH")
+
+	testCases := []struct {
+		name         string
+		tx1          *abci.TxResult
+		tx2          *abci.TxResult
+		expOverwrite bool // do we expect the second tx to overwrite the first tx
+	}{
+		{
+			"don't overwrite as a non-zero code was returned and the previous tx was successful",
+			&abci.TxResult{
+				Height: 1,
+				Index:  0,
+				Tx:     mockTx,
+				Result: abci.ResponseDeliverTx{
+					Code: abci.CodeTypeOK,
+				},
+			},
+			&abci.TxResult{
+				Height: 2,
+				Index:  0,
+				Tx:     mockTx,
+				Result: abci.ResponseDeliverTx{
+					Code: abci.CodeTypeOK + 1,
+				},
+			},
+			false,
+		},
+		{
+			"overwrite as the previous tx was also unsuccessful",
+			&abci.TxResult{
+				Height: 1,
+				Index:  0,
+				Tx:     mockTx,
+				Result: abci.ResponseDeliverTx{
+					Code: abci.CodeTypeOK + 1,
+				},
+			},
+			&abci.TxResult{
+				Height: 2,
+				Index:  0,
+				Tx:     mockTx,
+				Result: abci.ResponseDeliverTx{
+					Code: abci.CodeTypeOK + 1,
+				},
+			},
+			true,
+		},
+		{
+			"overwrite as the most recent tx was successful",
+			&abci.TxResult{
+				Height: 1,
+				Index:  0,
+				Tx:     mockTx,
+				Result: abci.ResponseDeliverTx{
+					Code: abci.CodeTypeOK,
+				},
+			},
+			&abci.TxResult{
+				Height: 2,
+				Index:  0,
+				Tx:     mockTx,
+				Result: abci.ResponseDeliverTx{
+					Code: abci.CodeTypeOK,
+				},
+			},
+			true,
+		},
+	}
+
+	hash := mockTx.Hash()
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			indexer := NewTxIndex(db.NewMemDB())
+
+			// index the first tx
+			err := indexer.Index(tc.tx1)
+			require.NoError(t, err)
+
+			// index the same tx with different results
+			err = indexer.Index(tc.tx2)
+			require.NoError(t, err)
+
+			res, err := indexer.Get(hash)
+			require.NoError(t, err)
+
+			if tc.expOverwrite {
+				require.Equal(t, tc.tx2, res)
+			} else {
+				require.Equal(t, tc.tx1, res)
+			}
+		})
+	}
+}
+
 func TestTxSearchMultipleTxs(t *testing.T) {
 	indexer := NewTxIndex(db.NewMemDB())
 
@@ -641,7 +809,7 @@ func txResultWithEvents(events []abci.Event) *abci.TxResult {
 }
 
 func benchmarkTxIndex(txsCount int64, b *testing.B) {
-	dir, err := ioutil.TempDir("", "tx_index_db")
+	dir, err := os.MkdirTemp("", "tx_index_db")
 	require.NoError(b, err)
 	defer os.RemoveAll(dir)
 

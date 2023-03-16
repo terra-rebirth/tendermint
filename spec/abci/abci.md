@@ -96,7 +96,7 @@ string pairs denoting metadata about what happened during the method's execution
 `Event` values can be used to index transactions and blocks according to what happened
 during their execution. Note that the set of events returned for a block from
 `BeginBlock` and `EndBlock` are merged. In case both methods return the same
-key, only the value defined in `EndBlock` is used.
+key and value combination, only the value defined in `EndBlock` is used.
 
 Each event has a `type` which is meant to categorize the event for a particular
 `Response*` or `Tx`. A `Response*` or `Tx` may contain multiple events with duplicate
@@ -179,8 +179,8 @@ enum EvidenceType {
 ```
 
 There are two forms of evidence: Duplicate Vote and Light Client Attack. More
-information can be found in either [data structures](https://github.com/tendermint/spec/blob/master/spec/core/data_structures.md)
-or [accountability](https://github.com/tendermint/spec/blob/master/spec/light-client/accountability/)
+information can be found in either [data structures](https://github.com/tendermint/tendermint/blob/v0.34.x/spec/core/data_structures.md)
+or [accountability](https://github.com/tendermint/tendermint/blob/v0.34.x/spec/light-client/accountability/)
 
 ## Determinism
 
