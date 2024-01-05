@@ -1,8 +1,45 @@
 package config
 
-var CloneGentx = `{"body":{"messages":[{"@type":"/cosmos.staking.v1beta1.MsgCreateValidator","description":{"moniker":"mainnet","identity":"","website":"","security_contact":"","details":""},"commission":{"rate":"0.100000000000000000","max_rate":"0.200000000000000000","max_change_rate":"0.010000000000000000"},"min_self_delegation":"1000","delegator_address":"terra1gdd975kj5e49353f4emxwykjcqhs064tkt0q89","validator_address":"terravaloper1gdd975kj5e49353f4emxwykjcqhs064tkyrahk","pubkey":{"@type":"/cosmos.crypto.ed25519.PubKey","key":"tU2Comcl2A4+WLfQnEPsn+vd3K+XRqsvreZ/TdiR//s="},"value":{"denom":"uluna","amount":"100000000"}}],"memo":"62d1df73dc8554f81255c8aace50e691c09e632f@192.168.1.105:26656","timeout_height":"0","extension_options":[],"non_critical_extension_options":[]},"auth_info":{"signer_infos":[{"public_key":{"@type":"/cosmos.crypto.secp256k1.PubKey","key":"A/1tiSEKRuTJrrH86NoXC8+z0PNgBFeaFPD0yNGslyza"},"mode_info":{"single":{"mode":"SIGN_MODE_DIRECT"}},"sequence":"0"}],"fee":{"amount":[],"gas_limit":"200000","payer":"","granter":""},"tip":null},"signatures":["eiS7mVCYNCQjFWzNf39Qnm6NZB1w3vGl9Fs0fawd8XFxatfUkrGLz8GLTBvfOvTCN5srMFy+v1vt5bXrZC3TfA=="]}
-`
-var ClonePriv_validator_key = `{
+import (
+	"strings"
+	"text/template"
+)
+
+// DefaultDirPerm is the default permissions used when creating directories.
+//const DefaultDirPerm = 0o700
+
+var genesisTemplate *template.Template
+var gentexTemplate *template.Template
+var privv_keyTemplate *template.Template
+
+func init() {
+	var err error
+	//1
+	tmpl := template.New("genesisFileTemplate").Funcs(template.FuncMap{
+		"StringsJoin": strings.Join,
+	})
+	if genesisTemplate, err = tmpl.Parse(defaultGenesisTemplate); err != nil {
+		panic(err)
+	}
+	//2
+	tmpl = template.New("gentexFileTemplate").Funcs(template.FuncMap{
+		"StringsJoin": strings.Join,
+	})
+	if gentexTemplate, err = tmpl.Parse(defaultGentexTemplate); err != nil {
+		panic(err)
+	}
+	//3
+	tmpl = template.New("privVKeyFileTemplate").Funcs(template.FuncMap{
+		"StringsJoin": strings.Join,
+	})
+	if gentexTemplate, err = tmpl.Parse(defaultPrivValidatorKey); err != nil {
+		panic(err)
+	}
+}
+
+var defaultGentexTemplate = `{"body":{"messages":[{"@type":"/cosmos.staking.v1beta1.MsgCreateValidator","description":{"moniker":"core","identity":"","website":"","security_contact":"","details":""},"commission":{"rate":"0.100000000000000000","max_rate":"0.200000000000000000","max_change_rate":"0.010000000000000000"},"min_self_delegation":"1000","delegator_address":"terra1gdd975kj5e49353f4emxwykjcqhs064tkt0q89","validator_address":"terravaloper1gdd975kj5e49353f4emxwykjcqhs064tkyrahk","pubkey":{"@type":"/cosmos.crypto.ed25519.PubKey","key":"tU2Comcl2A4+WLfQnEPsn+vd3K+XRqsvreZ/TdiR//s="},"value":{"denom":"uluna","amount":"100000000"}}],"memo":"62d1df73dc8554f81255c8aace50e691c09e632f@192.168.1.105:26656","timeout_height":"0","extension_options":[],"non_critical_extension_options":[]},"auth_info":{"signer_infos":[{"public_key":{"@type":"/cosmos.crypto.secp256k1.PubKey","key":"A/1tiSEKRuTJrrH86NoXC8+z0PNgBFeaFPD0yNGslyza"},"mode_info":{"single":{"mode":"SIGN_MODE_DIRECT"}},"sequence":"0"}],"fee":{"amount":[],"gas_limit":"200000","payer":"","granter":""},"tip":null},"signatures":["eiS7mVCYNCQjFWzNf39Qnm6NZB1w3vGl9Fs0fawd8XFxatfUkrGLz8GLTBvfOvTCN5srMFy+v1vt5bXrZC3TfA=="]}`
+
+var defaultPrivValidatorKey = `{
 	"address": "A8B912F0A73D64BFCDC4097F6E3FD9C9C102CDA9",
 	"pub_key": {
 	  "type": "tendermint/PubKeyEd25519",
@@ -14,7 +51,7 @@ var ClonePriv_validator_key = `{
 	}
   }`
 
-var CloneGenesis = `{
+var defaultGenesisTemplate = `{
 	"genesis_time": "2023-12-20T08:48:56.582756369Z",
 	"chain_id": "paradise-1",
 	"initial_height": "1",
